@@ -3,8 +3,8 @@
 # Backup script for postgres
 #===============================================================================================================
 #
-# Version 0.3
-# -----------
+# Version 0.3.1
+# -------------
 # Author: Xarlos
 # 
 # Howto:
@@ -19,6 +19,13 @@
 #
 # Changelog
 # ---------
+#
+# v0.3.1
+# Forgot to actually put the rm in *redface*
+#
+# v0.3
+# Added delete option of old wals
+#
 # v0.2
 # Added a bit nicer information
 # Added automatic "auto" option which limites the output.  $0 auto
@@ -263,7 +270,7 @@ else
 # Deleting WALs (Counting BACKWARDS)
 #---------------------------------------------------------------------------------------------------------------
    while [ "${delete_wal[$wal_count]}" != "${backup_file[$leave_count]}" ]; do
-      echo "Deleting: ${delete_wal[$wal_count]}"
+      rm "${delete_wal[$wal_count]}"
       wal_count=$(($wal_count - 1))
    done
     
@@ -271,7 +278,7 @@ else
 # Deleting Backups (Counting BACKWARDS)
 #---------------------------------------------------------------------------------------------------------------
    while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do
-      echo "Deleting: ${delete_back[$back_count]}"
+      rm "${delete_back[$back_count]}"
       back_count=$(($back_count - 1))
    done
 fi
