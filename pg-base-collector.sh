@@ -3,7 +3,7 @@
 # Backup script for postgres
 #===============================================================================================================
 #
-# Version 0.2
+# Version 0.3
 # -----------
 # Author: Xarlos
 # 
@@ -40,10 +40,12 @@
 required_user="postgres"                                # So that all perms etc are correct
 backup_dir="/var/lib/postgresql/9.2/main"               # Backup directory (main)
 backup_file="backup_$(date +%d%m%Y%H%M).tar"            # What the tar will be called
-tar_command="tar -czf ${backup_file} ${backup_dir} $op" # Command to tar (or gzip etc)
+tar_command="tar -czf ${backup_file} ${backup_dir}"     # Command to tar (or gzip etc)
 copy_command="cp $backup_file /srv/pg_archive/"         # This could be a mounted shared drive
-# copy_command="scp $backup_file server:/srv/pg/ $op"   # or an ssh copy (remember to setup keys!)
-log_file="$PWD/backup.log"                             # _If_ this is set, all output will go here. 
+# copy_command="scp $backup_file server:/srv/pg/"       # or an ssh copy (remember to setup keys!)
+leave_count=5                                           # How many "backups" to leave
+archive_location="/srv/pg_archive/"                     # WAL location
+#log_file="$PWD/backup.log"                             # _If_ this is set, all output will go here. 
 
 #---------------------------------------------------------------------------------------------------------------
 # Internal config
@@ -205,3 +207,76 @@ else
    echo "Copying to destination..................[FAILED]"
    echo "........................................NO BACKUP TO COPY"
 fi
+
+#---------------------------------------------------------------------------------------------------------------
+# Find the old backup files
+#---------------------------------------------------------------------------------------------------------------
+# 
+# List the order of the backup files by date
+# find the $leave_count entry.
+# If the files do not count up to the required Xth entry, then exit WITHOUT delete
+# array all files BEFORE this file (oldest first)
+
+backup_count=0
+cd "$archive_location"
+
+# Find the $leave_count entry. 
+IFS=$'\n'
+for backup_found in $(ls -lt *.backup); do
+    backup_count=$(($backup_count + 1))
+    backup_file[$backup_count]=$(echo $backup_found | awk '{print $9}')
+done
+
+echo "Backups found: $backup_count"
+echo "----------------------------"
+
+count=0
+while [ $count -le $backup_count ]; do
+   count=$(($count + 1))
+   if [ $count -le $leave_count ]; then
+      echo "[keep] ${backup_file[$count]}"
+   else
+      echo "[Delete] ${backup_file[$count]}"
+   fi
+done
+
+if [ $backup_count -le $leave_count ]; then
+   echo "There are less backups in storage than what we want"
+   echo "- Therefor no backups will be deleted"
+else
+   # Gather each WAL file
+   wal_count=0
+   for delete_wal_list in $(ls -lt 000000*) ; do
+      wal_count=$(($wal_count + 1))
+      delete_wal[$wal_count]=$(echo $delete_wal_list | awk '{print $9}')
+   done
+
+   # Gather each BACKUP file (if any)
+   back_count=0
+   for delete_back_list in $(ls -lt 000000*) ; do
+      back_count=$(($back_count + 1))
+      delete_back[$back_count]=$(echo $delete_back_list | awk '{print $9}')
+   done
+
+   
+#---------------------------------------------------------------------------------------------------------------
+# Deleting WALs (Counting BACKWARDS)
+#---------------------------------------------------------------------------------------------------------------
+   while [ "${delete_wal[$wal_count]}" != "${backup_file[$leave_count]}" ]; do
+      echo "Deleting: ${delete_wal[$wal_count]}"
+      wal_count=$(($wal_count - 1))
+   done
+    
+#---------------------------------------------------------------------------------------------------------------
+# Deleting Backups (Counting BACKWARDS)
+#---------------------------------------------------------------------------------------------------------------
+   while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do
+      echo "Deleting: ${delete_back[$back_count]}"
+      back_count=$(($back_count - 1))
+   done
+fi
+
+# Go back to usual dir
+cd -
+
+
