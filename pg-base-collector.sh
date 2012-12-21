@@ -3,8 +3,8 @@
 # Backup script for postgres
 #===============================================================================================================
 #
-# Version 0.3.1
-# -------------
+# Version 0.4 (Beta)
+# ------------------
 # Author: Xarlos
 # 
 # Howto:
@@ -19,6 +19,12 @@
 #
 # Changelog
 # ---------
+#
+# v0.4
+# Seems to work quite well. Bit of tidying done. 
+#
+# v0.3.2
+# Minor bug on delete.  eek.
 #
 # v0.3.1
 # Forgot to actually put the rm in *redface*
@@ -260,7 +266,7 @@ else
 
    # Gather each BACKUP file (if any)
    back_count=0
-   for delete_back_list in $(ls -lt 000000*) ; do
+   for delete_back_list in $(ls -lt backup_*.tar) ; do
       back_count=$(($back_count + 1))
       delete_back[$back_count]=$(echo $delete_back_list | awk '{print $9}')
    done
@@ -277,7 +283,8 @@ else
 #---------------------------------------------------------------------------------------------------------------
 # Deleting Backups (Counting BACKWARDS)
 #---------------------------------------------------------------------------------------------------------------
-   while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do
+   # while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do
+   while [ $back_count -gt $leave_count ]; do
       rm "${delete_back[$back_count]}"
       back_count=$(($back_count - 1))
    done
