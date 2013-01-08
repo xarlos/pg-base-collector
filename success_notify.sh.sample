@@ -1,0 +1,21 @@
+#!/bin/bash                                 
+                                            
+[ $# -lt 1 ] && exit 2                      
+                                            
+MESSAGE="$1"                                
+MESSAGE=$(echo -e $MESSAGE)                 
+                                            
+APP_TOKEN="your-app-token-here"  
+USER_KEYS=(                                 
+          'user-token-1'  
+          'user-token-2'  
+          )                                 
+                                            
+for USER_KEY in "${USER_KEYS[@]}"           
+do                                          
+   curl -s \                                
+     -F "token=${APP_TOKEN}" \              
+     -F "user=${USER_KEY}" \                
+     -F "message=${MESSAGE}" \              
+     https://api.pushover.net/1/messages    
+done                                        
