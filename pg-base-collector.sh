@@ -3,7 +3,7 @@
 # Backup script for postgres
 #===============================================================================================================
 #
-# Version 0.4 (Beta)
+# Version 0.5 (Beta)
 # ------------------
 # Author: Xarlos
 # 
@@ -15,10 +15,14 @@
 # 4. Confirm this with a press of the enter. 
 # 5. Watch the work as it happens. 
 # 6. Consider adding as a cron job. (doing so with the auto argument). 
-# --> 30 3 * * 7 Sunday /opt/pg-base-collector auto 2> /dev/null
+# --> 30 3 * * 7         /opt/pg-base-collector auto 2> /dev/null
 #
 # Changelog
 # ---------
+#
+# v0.5 
+# Tidied up the config a little.
+# Added a notify example at the bottom. 
 #
 # v0.4
 # Seems to work quite well. Bit of tidying done. 
@@ -46,19 +50,26 @@
 #---------------------------------------------------------------------------------------------------------------
 [ "$1" == "auto" ] && auto='Y' || auto='N'
 
-
 #---------------------------------------------------------------------------------------------------------------
 # Config
 #---------------------------------------------------------------------------------------------------------------
-required_user="postgres"                                # So that all perms etc are correct
-backup_dir="/var/lib/postgresql/9.2/main"               # Backup directory (main)
-backup_file="backup_$(date +%d%m%Y%H%M).tar"            # What the tar will be called
-tar_command="tar -czf ${backup_file} ${backup_dir}"     # Command to tar (or gzip etc)
-copy_command="cp $backup_file /srv/pg_archive/"         # This could be a mounted shared drive
-# copy_command="scp $backup_file server:/srv/pg/"       # or an ssh copy (remember to setup keys!)
-leave_count=5                                           # How many "backups" to leave
-archive_location="/srv/pg_archive/"                     # WAL location
-#log_file="$PWD/backup.log"                             # _If_ this is set, all output will go here. 
+# Environment:
+pg_dir="/var/lib/postgresql/9.2/main"                                 # Postgres directory
+archive_location="/srv/pg_archive/"                                   # WAL location
+backup_file="backup_$(date +%d%m%Y%H%M).tar"                          # Format of the backup tar (backup filename)   
+backup_folder="/opt/pg-base-collector/backupfolder"                  # I have decided to use a backup folder
+copy_command="mv ${backup_folder}/${backup_file} ${archive_location}" # This could be a mounted shared drive
+log_file="${backup_folder}/backup.log"                                # _If_ this is set, all output will go here 
+finish_script="/opt/pg-base-collector/success_notify.sh"              # Leave this as nothing if you dont want one. 
+
+# Assumed:
+required_user="postgres"                                              # So that all perms etc are correct
+leave_count=5                                                         # How many "backups" to leave. This includes
+                                                                      #   the WALs that are applicable.
+tar_command="tar -czf ${backup_folder}/${backup_file} ${pg_dir}"      # Command to tar (or gzip etc)
+                                                        
+# Examples / other: 
+# copy_command="scp ${backup_folder}/${backup_file} server:/srv/pg/"  # or an ssh copy (remember to setup keys!)
 
 #---------------------------------------------------------------------------------------------------------------
 # Internal config
@@ -71,10 +82,10 @@ stop_backup="SELECT pg_stop_backup();"
 # Initial checks
 #===============================================================================================================
 #---------------------------------------------------------------------------------------------------------------
-# Turn on silent operation if running in auto mode. 
+# check for a non-specified logfile
 #---------------------------------------------------------------------------------------------------------------
 if [ -z "$log_file" ]; then
-   log_file="/dev/null"                                   # If no logfile, then push to /dev/null
+   log_file="${backup_folder}/pg-base-collector.log"                     # If no logfile, then push to current dir. 
 fi
 
 #---------------------------------------------------------------------------------------------------------------
@@ -93,20 +104,37 @@ if [ "$(whoami)" != "$required_user" ]; then
 fi
 
 #---------------------------------------------------------------------------------------------------------------
-# Check that the backup_dir exists
+# Check that the pg_dir exists
 #---------------------------------------------------------------------------------------------------------------
-if [ ! -d "$backup_dir" ]; then
-   echo "Your designated backup directory does not exist"
+if [ ! -d "$pg_dir" ]; then
+   echo "Your designated postgres directory does not exist: $pg_dir"
    exit 1
 fi
 
 #---------------------------------------------------------------------------------------------------------------
-# Check perms for the PWD (as will need for the tar creation)
+# Check that the archive exists            (If you dont need/want WALs - then you can delete/ignore this check)
 #---------------------------------------------------------------------------------------------------------------
-if touch ${PWD}/check.del; then
-   rm ${PWD}/check.del 
+if [ ! -d "$archive_location" ]; then
+   echo "Your designated WAL archive directory does not exist: $archive_location"
+   exit 1
+fi
+
+
+#---------------------------------------------------------------------------------------------------------------
+# Check that the backup_dir exists
+#---------------------------------------------------------------------------------------------------------------
+if [ ! -d "$backup_folder" ]; then
+   echo "Your designated backup directory does not exist: $backup_folder"
+   exit 1
+fi
+
+#---------------------------------------------------------------------------------------------------------------
+# Check write permissions for the backup directory (as will need for the tar creation)
+#---------------------------------------------------------------------------------------------------------------
+if touch ${backup_folder}/check.del; then
+   rm ${backup_folder}/check.del 
 else
-   echo "You dont have permission to write to the tar destination"
+   echo "You dont have permission to write to the backup destination"
    exit 1
 fi
 
@@ -175,7 +203,7 @@ fi
 # Check for backup_label
 #---------------------------------------------------------------------------------------------------------------
 echo "Check for backup label________________________"
-if [ -f "$backup_dir/backup_label" ]; then
+if [ -f "${pg_dir}/backup_label" ]; then
    echo "Found the backup label..................[OK]"
 else
    echo "Cannot find the backup file.............[FAIL]"
@@ -210,7 +238,7 @@ fi
 # - this should have a shared key for passwordless copy in automatic mode. 
 #---------------------------------------------------------------------------------------------------------------
 echo "Copy to backup resting place_____________________"
-if [ -f ${backup_file} ]; then
+if [ -f ${backup_folder}/${backup_file} ]; then
    if $copy_command ; then
       echo "Copying to destination..................[OK]"
    else
@@ -225,6 +253,8 @@ fi
 # Find the old backup files
 #---------------------------------------------------------------------------------------------------------------
 # 
+# Maybe this could be a little more effective - but as it's done by count and NOT date - it's as it is for now. 
+#
 # List the order of the backup files by date
 # find the $leave_count entry.
 # If the files do not count up to the required Xth entry, then exit WITHOUT delete
@@ -283,12 +313,18 @@ else
 #---------------------------------------------------------------------------------------------------------------
 # Deleting Backups (Counting BACKWARDS)
 #---------------------------------------------------------------------------------------------------------------
-   # while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do
+   # while [ "${delete_back[$back_count]}" != "${backup_file[$leave_count]}" ]; do   <--- delete this now? 
    while [ $back_count -gt $leave_count ]; do
       rm "${delete_back[$back_count]}"
       back_count=$(($back_count - 1))
    done
 fi
+
+#---------------------------------------------------------------------------------------------------------------
+# launch script
+#---------------------------------------------------------------------------------------------------------------
+# Just a script you can add at will. In my case i have a pushover notification script. 
+$finish_script "Backup completed: $backup_file"
 
 # Go back to usual dir
 cd -
