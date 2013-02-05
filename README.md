@@ -33,6 +33,18 @@ This should be run on the master DB.
 
 Take a look. Its very simple. 
 
+How i would run
+---------------
+I usually run the command manually as the postgres user in the home directory (~postgres). I have pg-base-collector 
+located in the /opt/pg-base-collector area. 
+
+I run /opt/pg-base-collector and check the settings, and launch. 
+
+After a few checks (and happy with the outcome) i then add as a cronjob. Check the cron, as things like starting
+directories etc will be completely different and may cause pg-base-collector to fail or put the backup tar somewhere
+unexpected. 
+
+
 Suggestions welcome
 -------------------
 If you have any suggestions, please let me know. 
