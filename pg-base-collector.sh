@@ -68,11 +68,11 @@ pg_dir="/var/lib/postgresql/9.2/main"                                 # Postgres
 archive_location="/srv/pg_archive/"                                   # WAL location
 backup_prefix="backup_"                                               # This is used when deleting old archives!!
 backup_file="${backup_prefix}$(date +%d%m%Y%H%M).tar"                 # Format of the backup tar (backup filename)   
-backup_folder="/opt/pg-base-collector/backupfolder"                   # I have decided to use a backup folder
-copy_command="mv ${backup_folder}/${backup_file} ${archive_location}" # This could be a mounted shared drive
+backup_folder="$archive_location"                                     # I have decided to use a backup folder
+copy_command=""                                                       # This could be a mounted shared drive
                                                                       # or set to "" to keep it in $backup_folder
 log_file="${backup_folder}/backup.log"                                # _If_ this is set, all output will go here 
-finish_script="/opt/pg-base-collector/success_notify.sh"              # Leave this as nothing if you dont want one. 
+# finish_script="/opt/pg-base-collector/success_notify.sh"              # Leave this as nothing if you dont want one. 
 email_report_recipient="an@emal.addy"                                 # Recipient address
 email_report_title="pg-base-collector Report"                         # Email title
 email_report="N"                                                      # Set this to Y (capital) if you want to send
@@ -85,6 +85,7 @@ tar_command="tar -czf ${backup_folder}/${backup_file} ${pg_dir}"      # Command 
                                                         
 # Examples / other: 
 # copy_command="scp ${backup_folder}/${backup_file} server:/srv/pg/"  # or an ssh copy (remember to setup keys!)
+# copy_command="cp -p ${backup_folder}/${backup_file} ${archive_location}" # If you copy -p for the timestamp!!
 
 #---------------------------------------------------------------------------------------------------------------
 # Internal config
@@ -119,6 +120,14 @@ if [ "$(whoami)" != "$required_user" ]; then
 fi
 
 #---------------------------------------------------------------------------------------------------------------
+# Check that the backup filename does not already exist
+#---------------------------------------------------------------------------------------------------------------
+if [ -f "$backup_file" ]; then
+   echo "Your backup file already exists: $backup_file"
+   exit 1
+fi
+
+#---------------------------------------------------------------------------------------------------------------
 # Check that the pg_dir exists
 #---------------------------------------------------------------------------------------------------------------
 if [ ! -d "$pg_dir" ]; then
@@ -134,6 +143,16 @@ if [ ! -d "$archive_location" ]; then
    exit 1
 fi
 
+#---------------------------------------------------------------------------------------------------------------
+# Check that the notification scripts will work
+#---------------------------------------------------------------------------------------------------------------
+if [ ! -z "$finish_script" ]; then 
+
+   if [ ! -x "$finish_script" ]; then 
+      echo "Your finishing script: $backup_folder either doesn't exist, or not executable by you!"
+      exit 1
+   fi
+fi
 
 #---------------------------------------------------------------------------------------------------------------
 # Check that the backup_dir exists
@@ -178,7 +197,7 @@ echo "Check parameters"
 echo "----------------"
 echo "Database folder : ${pg_dir}"
 echo "Backup directory: ${backup_folder}"
-echo "Backup filename : ${PWD}/${backup_file}"
+echo "Backup filename : ${backup_file}"
 echo " "
 echo "Routine"
 echo "-------"
@@ -246,6 +265,15 @@ else
    echo "   ........................................STOPPING BACKUP"
 fi
 
+# Wait 3 seconds to ensure that the backup file is the correct. 
+# - Explanation:
+#   Okay, so the backup file is created, and then at EXACTLY the same second in time postgres
+#   will write to the .backup file and access the wal file it was last using. 
+#   So this 3 seconds will ensure that when the delete is performed, only the filename itself
+#   needs to be omitted from deleting, He hopes. 
+echo "   Waiting 3 seconds.......................[OK]"
+sleep 3
+
 #---------------------------------------------------------------------------------------------------------------
 # Stop 'backup' mode
 # - You will always want to set backup mode to stop if it ever started. 
@@ -282,23 +310,23 @@ fi
 # 1. List the order of the backup files by date
 # 2. find the $leave_count entry.
 # 3. If the files do not count up to the required Xth entry, then exit WITHOUT delete
-# 4. Array all files BEFORE this file (oldest first)
+# 4. Find all files older than this entry, and delete them. 
+#
 backup_count=0                                       # Init counts
 cd "$archive_location"                               # Jump into archive directory explicitly
 IFS=$'\n'                                            # Set field separator
 
 # 1. List the order of the backups by date
 # -----------------------------------------
-for backup_found in $(ls -lt *.backup); do
+for backup_found in $(ls -lt *.tar); do
     backup_count=$(($backup_count + 1))
     backup_file=$(echo $backup_found | awk '{print $9}')
 
     # 2. Find the $leave_count entry. 
     # -------------------------------
-    # Find the X'th backup file via it's counted parameter. 
-    # Once the X'th number is reached, we want to keep all files AFTER this backup entry. 
     if [ $backup_count -eq $leave_count ]; then
-        last_backup_entry="$backup_file"  # <--- here's our last file to keep
+        last_backup_entry="$backup_file"  # <--- here's our last file to keep, delete older than this!
+        echo "   Found backup entry ${leave_count}....................[$backup_file]"
     fi
 done
 
@@ -316,33 +344,13 @@ else
    # Prepare WAL and backup files ready for delete
    #---------------------------------------------------------------------------------------------------------------
    report_st_delete=$(date +%H:%M:%S)
-
-   wal_count=0
-   delete_rest="N"
+   report_wal_found_count=$(find . -name '0000*' | wc -l)
+   report_wal_delete_count=$(find . -name '0000*' ! -newer $last_backup_entry | wc -l)
+   echo "   Number of WALS found ...................[$report_wal_found_count]"
+   echo "   Number of WALS to delete from this......[$report_wal_delete_count]"
 
    # Delete all the files in the folder assumed to be WAL files:
-   for found_walfile in $(ls -lt 0000* ${backup_prefix}* | awk '{print $9}') ; do          
-
-      # Count found for report purposes:
-      wal_found_count=$(($wal_found_count +1))
-
-      # Ignore files until we get to the file we want to delete after
-      # as these files will be newer. 
-      if [ "$delete_rest" == "Y" ]; then
-         rm -v $found_walfile
-         report_wal_delete_count=$(($report_wal_delete_count +1))
-      fi 
-
-      # Test for the file AFTER the above, or it will set flag on the file we want 
-      # to keep as the Nth backup :-s
-      if [ "$found_walfile" == "$last_backup_entry" ]; then
-          # Ignore until this loop is satisfied
-          delete_rest="Y"
-      fi
-   done
-   report_wal_found_count=$wal_found_count
-   report_wal_delete_count=$wal_del_count
-
+   find . ! -newer $last_backup_entry ! -name $last_backup_entry -delete
    report_fi_delete=$(date +%H:%M:%S)
 fi
 
@@ -351,7 +359,7 @@ fi
 # Finishing summary
 #---------------------------------------------------------------------------------------------------------------
 summary_backup_files=$(ls -l ${archive_location}/*.backup | wc -l)
-summary_tar_files=$(ls -l ${archive_location}/*.backup | wc -l)
+summary_tar_files=$(ls -l ${archive_location}/*.tar | wc -l)
 summary_wal_files=$(ls ${archive_location} | grep -v ".tar" | grep -v ".backup" | wc -l)
 
 # Example to use in a pushover message:
@@ -387,7 +395,9 @@ fi
 # launch custom script (pushover script in this case)
 #---------------------------------------------------------------------------------------------------------------
 # Just a script you can add at will. In my case i have a pushover notification script and email.  
-$finish_script "Backup completed: $backup_file $quick_summary"
+if [ ! -z "$finish_script" ]; then
+   $finish_script "Backup completed: $backup_file $quick_summary"
+fi
 
 # Go back to orig dir
 cd -
