@@ -3,7 +3,7 @@
 # Backup script for postgres
 #===============================================================================================================
 #
-# Version 0.7 (Beta)
+# Version 0.8 (Beta)
 # ------------------
 # Author: Xarlos
 # 
@@ -19,40 +19,8 @@
 #
 # Changelog
 # ---------
+# See Changelog.txt
 #
-# v0.7
-# Changed the way it finds the old archive logs. This way seems much cleaner
-# though i really wanted to make sure that any other logs in here are not 
-# likely to be deleted by mistake (though ideally this folder should be bare 
-# postgres backup data). Or else it could be cleaner still.
-#
-# v0.6 
-# More of a detailed report is now available afterwards. 
-# It also allows the alility for email here too.
-#
-# v0.5 
-# Tidied up the config a little.
-# Added a notify example at the bottom. 
-#
-# v0.4
-# Seems to work quite well. Bit of tidying done. 
-#
-# v0.3.2
-# Minor bug on delete.  eek.
-#
-# v0.3.1
-# Forgot to actually put the rm in *redface*
-#
-# v0.3
-# Added delete option of old wals
-#
-# v0.2
-# Added a bit nicer information
-# Added automatic "auto" option which limites the output.  $0 auto
-#
-# v0.1 
-# Backs up file
-# Work in progress
 #===============================================================================================================
 
 #---------------------------------------------------------------------------------------------------------------

@@ -1,0 +1,43 @@
+# Changelog
+# ---------
+#
+# v0.8
+# Some big changes have been made here now regarding the way deletes are handled. 
+# I now look for the last tar file in the given X files to keep, and then "find" files that 
+# are older than this. This can open up problems where if anything other than the postgres
+# tar and wals files are present, they could be deleted. Granted they shouldn't be there, 
+# but i may put a check in to ensure that if they are - i will highlight and exit. 
+#
+# v0.7
+# Changed the way it finds the old archive logs. This way seems much cleaner
+# though i really wanted to make sure that any other logs in here are not 
+# likely to be deleted by mistake (though ideally this folder should be bare 
+# postgres backup data). Or else it could be cleaner still.
+#
+# v0.6 
+# More of a detailed report is now available afterwards. 
+# It also allows the alility for email here too.
+#
+# v0.5 
+# Tidied up the config a little.
+# Added a notify example at the bottom. 
+#
+# v0.4
+# Seems to work quite well. Bit of tidying done. 
+#
+# v0.3.2
+# Minor bug on delete.  eek.
+#
+# v0.3.1
+# Forgot to actually put the rm in *redface*
+#
+# v0.3
+# Added delete option of old wals
+#
+# v0.2
+# Added a bit nicer information
+# Added automatic "auto" option which limites the output.  $0 auto
+#
+# v0.1 
+# Backs up file
+# Work in progress
