@@ -40,10 +40,14 @@ backup_folder="$archive_location"                                     # I have d
 copy_command=""                                                       # This could be a mounted shared drive
                                                                       # or set to "" to keep it in $backup_folder
 log_file="${backup_folder}/backup.log"                                # _If_ this is set, all output will go here 
+
+# Finishing scripts
 # finish_script="/opt/pg-base-collector/success_notify.sh"              # Leave this as nothing if you dont want one. 
+
+# Email details (if you chose to send)
+email_report="N"                                                      # Set this to Y (capital) if you want to send
 email_report_recipient="an@emal.addy"                                 # Recipient address
 email_report_title="pg-base-collector Report"                         # Email title
-email_report="N"                                                      # Set this to Y (capital) if you want to send
 
 # Assumed:
 required_user="postgres"                                              # So that all perms etc are correct
